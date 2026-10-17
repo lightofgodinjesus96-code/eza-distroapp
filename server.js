@@ -273,5 +273,15 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, () => console.log(`🎵 EZA DISTROAPP running → http://localhost:${PORT}`));
+// Wrap listen so it only runs locally, not on Vercel serverless
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+// Export the app for Vercel
+module.exports = app;
+
   
