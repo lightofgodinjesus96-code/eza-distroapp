@@ -1,26 +1,21 @@
-          const express = require('express');
+         const express = require('express');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 
+// Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static assets correctly
-app.use(express.static(path.join(__dirname)));
+// Serve all static files (CSS, JS, images, index.html) directly from root
+app.use(express.static(__dirname));
 
-// Catch-all route to serve index.html for your frontend dashboard
+// Route all requests to index.html for single-page app routing
 app.get('*', (req, res) => {
-  const indexPath = path.join(__dirname, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(404).send('index.html not found');
-  }
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Run locally only, never on Vercel
+// Local development only
 if (process.env.NODE_ENV !== 'production' && require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
@@ -28,5 +23,4 @@ if (process.env.NODE_ENV !== 'production' && require.main === module) {
   });
 }
 
-// Export the app for Vercel serverless routing
 module.exports = app;
