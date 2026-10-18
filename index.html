@@ -301,6 +301,14 @@ function relBlock(r){
       ${overall}
     </div>
     <div style="margin-top:12px">${r.storeStatuses.map(x=>{const s=STORES.find(y=>y.id===x.store);return `<span class="store-chip">${s?s.icon:''} ${s?s.name:x.store} ${pills[x.state]||''} <span style="color:var(--muted);font-size:11px">${stName[x.state]||x.state}</span></span>`}).join('')}</div>
+    <div style="margin-top:10px;font-size:12px;color:var(--muted)">🔢 UPC/EAN: <b style="color:var(--text)">${esc(r.upc||'—')}</b>${r.labelName?` · 🏷️ ${esc(r.labelName)}`:''}${r.contentId?' · 🎬 Content ID: <span style="color:#4ade80">active</span>':''}</div>
+    <details style="margin-top:8px"><summary style="cursor:pointer;font-size:13px;color:var(--gold)">Tracklist & ISRC codes</summary>
+      <div style="margin-top:8px">${r.tracks.map((t,i)=>`<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)">${i+1}. ${esc(t.name)} ${t.url?`<a href="${t.url}" target="_blank" style="margin-left:6px">▶ play</a>`:''} <span style="color:var(--muted);font-size:12px;float:right">ISRC ${esc(t.isrc||'pending')}</span></div>`).join('')||'<div style="padding:14px;color:var(--muted)">No tracks</div>'}</div></details>
+    ${me.role!=='admin'?`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      ${r.status==='in_review'?`<button class="btn btn-ghost btn-sm" onclick="editRelease('${r.id}')">✏️ Edit release</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="dupRelease('${r.id}')">⧉ Duplicate</button>
+      ${r.status!=='taken_down'?`<button class="btn btn-red btn-sm" onclick="takedownRelease('${r.id}')">⛔ Takedown</button>`:''}
+    </div>`:''}
   </div>`;
 }
 function pgReleases(m){
@@ -314,16 +322,17 @@ function pgReleases(m){
 /* ---- upload wizard ---- */
 let wiz=null;
 function pgUpload(m){
-  if(!wiz)wiz={step:0,title:'',artistName:me.artist,genre:'',releaseDate:'',language:'English',explicit:false,artData:null,tracks:[],stores:STORES.map(s=>s.id),relId:null,progress:''};
-  const steps=['Release info','Artwork','Tracks','Stores','Review & submit'];
-  const bodies=[wInfo,wArt,wTracks,wStores,wReview];
-  const ok=[()=>wiz.title&&wiz.artistName&&wiz.genre&&wiz.releaseDate,()=>!!wiz.artData,()=>wiz.tracks.length>0&&wiz.tracks.every(t=>t.name&&t.file),()=>wiz.stores.length>0,()=>true];
+  if(!wiz)wiz={step:0,title:'',artistName:me.artist,genre:'',releaseDate:'',language:'English',explicit:false,artData:null,tracks:[],stores:STORES.map(s=>s.id),relId:null,progress:'',labelName:'',upc:'',contentId:false,editId:null,busy:false};
+  const editing=!!wiz.editId;
+  const steps=editing?['Release info','Review & save']:['Release info','Artwork','Tracks','Stores','Review & submit'];
+  const bodies=editing?[wInfo,wReview]:[wInfo,wArt,wTracks,wStores,wReview];
+  const ok=editing?[()=>wiz.title&&wiz.artistName&&wiz.genre&&wiz.releaseDate,()=>true]:[()=>wiz.title&&wiz.artistName&&wiz.genre&&wiz.releaseDate,()=>!!wiz.artData,()=>wiz.tracks.length>0&&wiz.tracks.every(t=>t.name&&t.file),()=>wiz.stores.length>0,()=>true];
   m.innerHTML=`<div class="page-title">Upload a release</div><div class="page-sub">5 steps to worldwide distribution.</div>
     <div class="wizard-steps">${steps.map((s,i)=>`<div class="wstep ${i===wiz.step?'active':i<wiz.step?'done':''}">${i+1}. ${s}</div>`).join('')}</div>
     <div class="wcard" id="wb"></div>
     <div class="wiz-nav">
       <button class="btn btn-ghost" id="wB" ${wiz.step===0||wiz.relId?'disabled':''}>← Back</button>
-      <button class="btn btn-primary" id="wN" ${wiz.busy?'disabled':''}>${wiz.step===4?'🚀 Submit for distribution':'Continue →'}</button>
+      <button class="btn btn-primary" id="wN" ${wiz.busy?'disabled':''}>${wiz.step===(editing?1:4)?(editing?'💾 Save changes':'🚀 Submit for distribution'):'Continue →'}</button>
     </div>
     ${wiz.progress?`<div class="wcard" style="margin-top:14px;max-width:740px"><div style="font-size:13px;color:var(--muted)">${esc(wiz.progress)}</div><div class="progress"><div id="wProg" style="width:${wiz.progPct||0}%"></div></div></div>`:''}`;
   bodies[wiz.step]();
@@ -342,6 +351,9 @@ function wInfo(){
     <div class="field"><label>Release date *</label><input type="date" value="${wiz.releaseDate}" min="${new Date().toISOString().slice(0,10)}" onchange="wiz.releaseDate=this.value"></div>
     <div class="field"><label>Language</label><select onchange="wiz.language=this.value">${['English','Spanish','French','German','Portuguese','Japanese','Korean','Hindi','Arabic','Swahili','Igbo','Yoruba'].map(l=>`<option ${wiz.language===l?'selected':''}>${l}</option>`).join('')}</select></div>
     <div class="field"><label>Explicit?</label><select onchange="wiz.explicit=this.value==='yes'"><option value="no" ${!wiz.explicit?'selected':''}>No — clean</option><option value="yes" ${wiz.explicit?'selected':''}>Yes — explicit 🔞</option></select></div>
+    <div class="field"><label>Record label (optional)</label><input value="${esc(wiz.labelName||'')}" oninput="wiz.labelName=this.value" placeholder="e.g. PEZA Records"></div>
+    <div class="field"><label>Custom UPC / EAN (optional)</label><input value="${esc(wiz.upc||'')}" oninput="wiz.upc=this.value.replace(/\D/g,'').slice(0,13)" placeholder="Leave blank — EZA auto-assigns" maxlength="13"></div>
+    <div class="field"><label>YouTube Content ID 🎬</label><select ${me.plan!=='pro'?'disabled':''} onchange="wiz.contentId=this.value==='yes'"><option value="no" ${!wiz.contentId?'selected':''}>Off</option><option value="yes" ${wiz.contentId?'selected':''}>On — collect YouTube royalties</option></select>${me.plan!=='pro'?'<div style="font-size:12px;color:var(--muted);margin-top:4px">EZA PRO feature — <a href="#/settings">upgrade</a></div>':''}</div>
   </div>`;
 }
 function wArt(){
@@ -368,7 +380,8 @@ function renderTracks(){
   el.innerHTML=wiz.tracks.map((t,i)=>`
     <div class="track-row"><div class="num">${i+1}</div>
       <div class="grow"><input value="${esc(t.name)}" placeholder="Track title" oninput="wiz.tracks[${i}].name=this.value">
-      <div class="meta">${t.file?esc(t.file.name)+' ('+Math.round(t.file.size/1e6*10)/10+' MB)':''}</div></div>
+      <div class="meta">${t.file?esc(t.file.name)+' ('+Math.round(t.file.size/1e6*10)/10+' MB)':''}</div>
+      <input style="width:170px;font-size:12px;color:var(--muted);margin-top:4px;border-bottom:1px solid var(--border)" value="${esc(t.isrc||'')}" placeholder="ISRC (blank = auto)" oninput="wiz.tracks[${i}].isrc=this.value.replace(/[^A-Za-z0-9-]/g,'').slice(0,15)" maxlength="15"></div>
       <label class="btn btn-ghost btn-sm">${t.file?'Replace':'Attach audio'}<input type="file" accept="audio/*" style="display:none" onchange="attachAudio(${i},this)"></label>
       <button class="btn btn-ghost btn-sm" onclick="wiz.tracks.splice(${i},1);renderTracks()">✕</button>
     </div>`).join('')||`<div class="empty">No tracks yet — add one!</div>`;
@@ -389,11 +402,21 @@ function wReview(){
         <div style="font-size:14px;margin-bottom:10px">📅 ${esc(wiz.releaseDate)} · ${wiz.tracks.length} track(s) · ${(wiz.tracks.reduce((n,t)=>n+(t.file?.size||0),0)/1e6).toFixed(1)} MB audio</div>
         <div>${wiz.stores.map(id=>{const s=STORES.find(x=>x.id===id);return s?`<span class="store-chip">${s.icon} ${s.name}</span>`:''}).join('')}</div>
       </div></div>
+    ${wiz.tracks.length?`<div style="margin-top:12px">${wiz.tracks.map((t,i)=>`<span class="store-chip">${i+1}. ${esc(t.name)} · ISRC ${esc(t.isrc||'auto')}</span>`).join('')}</div>`:''}
+    <div style="margin-top:12px;font-size:13px;color:var(--muted)">🏷️ Label: <b style="color:var(--text)">${esc(wiz.labelName||'—')}</b> · 🔢 UPC/EAN: <b style="color:var(--text)">${esc(wiz.upc||'auto-assigned by EZA')}</b> · 🎬 Content ID: <b style="color:var(--text)">${wiz.contentId?'ON':'Off'}</b></div>
     <div style="margin-top:20px;background:rgba(245,179,1,.06);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:13px;color:var(--muted)">
       📋 You confirm you own 100% of the rights to this release. Plan: <b style="color:var(--gold)">${esc((PLANS[me.plan]||{}).name||me.plan)}</b> — ${PLANS[me.plan]?.commission>0?'EZA takes '+PLANS[me.plan].commission*100+'% of earnings':'you keep 100% of earnings'}. Stores typically go live 24–72h after review.</div>`;
 }
 const fileToDataURL=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(f)});
 async function submitRelease(m){
+  if(wiz.editId){
+    try{
+      wiz.busy=true;wiz.progress='Saving changes…';wiz.progPct=50;pgUpload(m);
+      await api('/api/releases/'+wiz.editId,{method:'PUT',body:JSON.stringify({title:wiz.title,artistName:wiz.artistName,genre:wiz.genre,releaseDate:wiz.releaseDate,language:wiz.language,explicit:wiz.explicit,labelName:wiz.labelName,upc:wiz.upc||undefined,contentId:wiz.contentId,stores:wiz.stores,...(wiz.artData?{artData:wiz.artData}:{})})});
+      toast('✅ Release updated');wiz=null;go('/releases');
+    }catch(e){wiz.busy=false;wiz.progress='';toast(e.message,true);pgUpload(m)}
+    return;
+  }
   try{
     wiz.busy=true;wiz.progress='Creating release…';wiz.progPct=10;pgUpload(m);
     const rel=await api('/api/releases',{method:'POST',body:JSON.stringify({title:wiz.title,artistName:wiz.artistName,genre:wiz.genre,releaseDate:wiz.releaseDate,language:wiz.language,explicit:wiz.explicit,artData:wiz.artData,stores:wiz.stores})});
@@ -401,12 +424,29 @@ async function submitRelease(m){
     for(let i=0;i<wiz.tracks.length;i++){
       wiz.progress=`Uploading track ${i+1} of ${wiz.tracks.length}: ${wiz.tracks[i].name}`;wiz.progPct=15+Math.round(80*(i/wiz.tracks.length));pgUpload(m);
       const data=await fileToDataURL(wiz.tracks[i].file);
-      await api(`/api/releases/${wiz.relId}/tracks`,{method:'POST',body:JSON.stringify({name:wiz.tracks[i].name,data})});
+      await api(`/api/releases/${wiz.relId}/tracks`,{method:'POST',body:JSON.stringify({name:wiz.tracks[i].name,data,isrc:wiz.tracks[i].isrc||undefined})});
     }
     wiz.progress='✅ Submitted! Your release is now in review.';wiz.progPct=100;pgUpload(m);
     toast('🚀 Release submitted for distribution!');
     setTimeout(()=>{wiz=null;go('/releases')},1200);
   }catch(e){wiz.busy=false;wiz.progress='';toast(e.message,true);pgUpload(m)}
+}
+
+/* ---- release actions ---- */
+function editRelease(id){
+  const r=REL.find(x=>x.id===id);if(!r)return;
+  wiz={step:0,title:r.title,artistName:r.artistName,genre:r.genre,releaseDate:r.releaseDate,language:r.language,explicit:r.explicit,artData:null,tracks:[],stores:[...r.stores],relId:null,progress:'',labelName:r.labelName||'',upc:r.upc||'',contentId:!!r.contentId,editId:id,busy:false};
+  go('/upload');
+}
+async function dupRelease(id){
+  const r=REL.find(x=>x.id===id);if(!r)return;
+  wiz={step:0,title:r.title+' (Deluxe)',artistName:r.artistName,genre:r.genre,releaseDate:'',language:r.language,explicit:r.explicit,artData:null,tracks:r.tracks.map(t=>({name:t.name,file:null,isrc:''})),stores:[...r.stores],relId:null,progress:'',labelName:r.labelName||'',upc:'',contentId:false,editId:null,busy:false};
+  if(r.artUrl){try{const resp=await fetch(r.artUrl);wiz.artData=await fileToDataURL(await resp.blob())}catch(e){}}
+  toast('Duplicated — re-attach audio and submit as new');go('/upload');
+}
+async function takedownRelease(id){
+  if(!confirm('Takedown this release from ALL stores? This stops all royalties.'))return;
+  try{await api(`/api/releases/${id}/takedown`,{method:'POST'});toast('⛔ Release taken down');refreshReleases().then(()=>pgReleases(document.querySelector('.main')))}catch(e){toast(e.message,true)}
 }
 
 /* ---- earnings ---- */
