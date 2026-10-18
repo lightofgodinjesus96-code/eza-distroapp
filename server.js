@@ -263,7 +263,7 @@ const server = http.createServer(async (req, res) => {
   /* ===== static files ===== */
   let file = p === '/' ? '/index.html' : p;
   if (file.startsWith('/uploads/')) file = '/../data/uploads/' + path.basename(file);
-  const full = path.join(__dirname, file);
+  const full = path.join(__dirname, file.startsWith('/') ? file.slice(1) : file);
   if (!full.startsWith(path.normalize(PUB)) && !full.startsWith(UPLOADS)) { res.writeHead(403); return res.end(); }
   fs.readFile(full, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
