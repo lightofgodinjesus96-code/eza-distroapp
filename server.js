@@ -430,7 +430,7 @@ const server = http.createServer(async (req, res) => {
     res.end(data);
   });
 });
-
 server.listen(PORT, () => console.log('Server running on port ' + PORT));
-
-module.exports = server;
+module.exports = (req, res) => {
+  server.emit('request', req, res);
+};
