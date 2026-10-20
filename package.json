@@ -1,0 +1,8 @@
+{
+  "name": "eza-distroapp",
+  "version": "1.0.0",
+  "description": "EZA DISTROAPP — music distribution platform by HB pEza",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
